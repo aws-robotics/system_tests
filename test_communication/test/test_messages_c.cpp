@@ -182,6 +182,7 @@ public:
       MessageT message;
       size_t nb_msgs = get_message_num(&message);
       for (size_t msg_cnt = 0; msg_cnt < nb_msgs; msg_cnt++) {
+        printf("MSG_CNT = %zu\n", msg_cnt);
         get_message(&message, msg_cnt);
         auto msg_exit = make_scope_exit(
           [&message]() {
@@ -189,10 +190,13 @@ public:
           });
         ret = rcl_publish(&publisher, &message, nullptr);
         ASSERT_EQ(RCL_RET_OK, ret) << rcl_get_error_string().str;
+        printf("END MSG_CNT = %zu\n", msg_cnt);
       }
     }
 
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+#ifdef FOOO
     {
       MessageT message;
       size_t nb_msgs = get_message_num(&message);
@@ -227,6 +231,7 @@ public:
         verify_message(message, msg_cnt);
       }
     }
+#endif
   }
 };
 
@@ -252,6 +257,17 @@ void fini_message(MessageT * msg);
   void fini_message(TYPE * msg) { \
     TYPE ## __fini(msg); \
   }
+
+DEFINE_FINI_MESSAGE(test_msgs__msg__BasicTypes)
+DEFINE_FINI_MESSAGE(test_msgs__msg__BoundedSequences)
+DEFINE_FINI_MESSAGE(test_msgs__msg__UnboundedSequences)
+
+template<>
+void fini_message(test_msgs__msg__MultiNested * msg)
+{
+  printf("XXX DESTROY %p\n", (void*) msg);
+  test_msgs__msg__Arrays__Sequence__fini(&msg->bounded_sequence_of_arrays);
+}
 
 // Test publish/subscribe with a variety of messages
 
@@ -355,9 +371,9 @@ void verify_message(test_msgs__msg__BasicTypes & message, size_t msg_num)
   EXPECT_EQ(expected_msg.uint32_value, message.uint32_value);
   EXPECT_EQ(expected_msg.int64_value, message.int64_value);
   EXPECT_EQ(expected_msg.uint64_value, message.uint64_value);
+  fini_message(&expected_msg);
 }
 
-DEFINE_FINI_MESSAGE(test_msgs__msg__BasicTypes)
 TEST_F(CLASSNAME(TestMessagesFixture, RMW_IMPLEMENTATION), test_basic_types) {
   const rosidl_message_type_support_t * ts = ROSIDL_GET_MSG_TYPE_SUPPORT(
     test_msgs, msg, BasicTypes);
@@ -974,9 +990,9 @@ void verify_message(test_msgs__msg__UnboundedSequences & message, size_t msg_num
     EXPECT_EQ(0, strcmp(message.string_values.data[i].data,
       expected_msg.string_values.data[i].data));
   }
+  fini_message(&expected_msg);
 }
 
-DEFINE_FINI_MESSAGE(test_msgs__msg__UnboundedSequences)
 TEST_F(CLASSNAME(TestMessagesFixture, RMW_IMPLEMENTATION), test_unbounded_sequences) {
   const rosidl_message_type_support_t * ts = ROSIDL_GET_MSG_TYPE_SUPPORT(
     test_msgs, msg, UnboundedSequences);
@@ -1143,9 +1159,9 @@ void verify_message(test_msgs__msg__BoundedSequences & message, size_t msg_num)
     EXPECT_EQ(0, strcmp(message.string_values.data[i].data,
       expected_msg.string_values.data[i].data));
   }
+  fini_message(&expected_msg);
 }
 
-DEFINE_FINI_MESSAGE(test_msgs__msg__BoundedSequences)
 TEST_F(CLASSNAME(TestMessagesFixture, RMW_IMPLEMENTATION), test_bounded_sequences) {
   const rosidl_message_type_support_t * ts = ROSIDL_GET_MSG_TYPE_SUPPORT(
     test_msgs, msg, BoundedSequences);
@@ -1163,12 +1179,14 @@ size_t get_message_num(test_msgs__msg__MultiNested * msg)
 template<>
 void init_message(test_msgs__msg__MultiNested * msg)
 {
+  printf("XXXX INIT %p\n", (void*) msg);
   test_msgs__msg__MultiNested__init(msg);
 }
 
 template<>
 void get_message(test_msgs__msg__MultiNested * msg, size_t msg_num)
 {
+  printf("XXX CREATE %p\n", (void*) msg);
   size_t i;
   test_msgs__msg__MultiNested__init(msg);
   test_msgs__msg__Arrays arrays;
@@ -1235,7 +1253,6 @@ void verify_message(test_msgs__msg__MultiNested & message, size_t msg_num)
   }
 }
 
-DEFINE_FINI_MESSAGE(test_msgs__msg__MultiNested)
 TEST_F(CLASSNAME(TestMessagesFixture, RMW_IMPLEMENTATION), test_multi_nested) {
   const rosidl_message_type_support_t * ts = ROSIDL_GET_MSG_TYPE_SUPPORT(
     test_msgs, msg, MultiNested);
